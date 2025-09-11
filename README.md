@@ -50,11 +50,16 @@ func main() {
 		JobName:       "my-job",
 		OtelCollector: "otel-collector:4317",
 
+		// เปิด/ปิดความสามารถ
 		EnableTracing: true,
 		EnableMetrics: true,
 		EnableSentry:  true,
 		EnableLoki:    true,
 
+		// OTLP: TLS ใน production
+		OTLPUseTLS: false, // true เพื่อใช้ TLS
+
+		// ปลายทางส่งออก
 		SentryDSN: "<your-sentry-dsn>",
 		LokiURL:   "http://loki:3100/loki/api/v1/push",
 	})
@@ -70,17 +75,18 @@ func main() {
 ## ตาราง Methods และฟังก์ชัน
 
 ### โครงสร้าง Config
-| Field          | Type   | อธิบาย                                        |
-|----------------|--------|-----------------------------------------------|
-| ServiceName    | string | ชื่อบริการ (ใช้กับ OTel/Zap labels)          |
-| JobName        | string | ชื่อ job/process (label เสริม)               |
-| OtelCollector  | string | ที่อยู่ OTLP gRPC (เช่น `otel-collector:4317`)|
-| EnableTracing  | bool   | เปิด/ปิด tracing                              |
-| EnableMetrics  | bool   | เปิด/ปิด metrics                              |
-| EnableSentry   | bool   | เปิด/ปิด Sentry                               |
-| EnableLoki     | bool   | เปิด/ปิด Loki (helper ส่ง log async)          |
-| SentryDSN      | string | DSN ของ Sentry                                 |
-| LokiURL        | string | Endpoint Loki `/loki/api/v1/push`             |
+| Field         | Type   | อธิบาย                                       |
+|---------------|--------|----------------------------------------------|
+| ServiceName   | string | ชื่อบริการ (ใช้กับ OTel/Zap labels)         |
+| JobName       | string | ชื่อ job/process (label เสริม)              |
+| OtelCollector | string | ที่อยู่ OTLP gRPC (เช่น `otel-collector:4317`)|
+| EnableTracing | bool   | เปิด/ปิด tracing                             |
+| EnableMetrics | bool   | เปิด/ปิด metrics                             |
+| EnableSentry  | bool   | เปิด/ปิด Sentry                              |
+| EnableLoki    | bool   | เปิด/ปิด Loki (helper ส่ง log async)         |
+| OTLPUseTLS| bool   | ใช้ TLS สำหรับ OTLP (แนะนำ production)|
+| SentryDSN     | string | DSN ของ Sentry                                |
+| LokiURL       | string | Endpoint Loki `/loki/api/v1/push`            |
 
 ### ฟังก์ชันระดับแพ็กเกจ
 | Function                                                | Signature                                                                     | อธิบาย                                                                                       |
@@ -97,21 +103,23 @@ func main() {
 | SendLokiAsync                                           | SendLokiAsync(level, msg, traceID, spanID string)                              | ส่ง log เข้า Loki แบบ asynchronous ผ่าน channel ภายใน                                       |
 
 ### ชนิดข้อมูล Eotel และ Methods
-| Method / Field         | Signature                                                             | อธิบาย                                                                                         |
-|------------------------|------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|
-| TraceName              | (l *Eotel) TraceName(name string) *Eotel                              | ตั้งชื่อ span/log ปัจจุบัน                                                                     |
-| Info/Debug/Warn/Error  | (l *Eotel) <Level>(msg string)                                         | เขียน log + set attributes + metrics และปิด span (Fatal จะ os.Exit(1))                         |
-| WithField              | (l *Eotel) WithField(key string, value any) *Eotel                    | เพิ่ม Zap field + OTel attribute                                                               |
-| WithFields             | (l *Eotel) WithFields(m map[string]any) *Eotel                        | เพิ่มหลายฟิลด์รวดเดียว                                                                         |
-| WithError              | (l *Eotel) WithError(err error) *Eotel                                | ผูก error กับ logger + attribute "error" (และเรียก exporter ถ้ามี)                             |
-| Ctx                    | (l *Eotel) Ctx() context.Context                                      | คืน context ปัจจุบัน                                                                            |
-| Span                   | (l *Eotel) Span() trace.Span                                          | คืน span ปัจจุบัน (อาจเป็น nil)                                                                |
-| WithTracer             | (l *Eotel) WithTracer(name string, fn func(ctx context.Context) error) error | สร้าง span เฉพาะกิจแล้วรัน fn ภายใน                                                             |
-| SpanEvent              | (l *Eotel) SpanEvent(name string, attrs ...attribute.KeyValue)        | เพิ่ม event ลงใน span                                                                           |
-| SetSpanAttr            | (l *Eotel) SetSpanAttr(key string, value any)                         | ตั้ง attribute ให้ span                                                                          |
-| SetSpanError           | (l *Eotel) SetSpanError(err error)                                    | Record error ลง span                                                                             |
-| Child                  | (l *Eotel) Child(name string) *Eotel                                  | สร้าง child span + child logger (สืบทอด tracer/meter/exporter จาก parent)                      |
-| Start / Timer.Stop     | (l *Eotel) Start(name string) Timer  /  (t *eotelTimer) Stop()        | ตัวจับเวลาแบบง่าย: บันทึก event `custom.duration_ms` เมื่อ Stop()                               |
+| Method / Field        | Signature                                                                    | อธิบาย                                                                    |
+|-----------------------|------------------------------------------------------------------------------|---------------------------------------------------------------------------|
+| TraceName             | (l *Eotel) TraceName(name string) *Eotel                                     | ตั้งชื่อ span/log ปัจจุบัน                                                |
+| Info/Debug/Warn/Error | (l *Eotel) <Level>(msg string)                                               | เขียน log + set attributes + metrics และปิด span (Fatal จะ os.Exit(1))    |
+| WithField             | (l *Eotel) WithField(key string, value any) *Eotel                           | เพิ่ม Zap field + OTel attribute                                          |
+| WithFields            | (l *Eotel) WithFields(m map[string]any) *Eotel                               | เพิ่มหลายฟิลด์รวดเดียว                                                    |
+| WithError             | (l *Eotel) WithError(err error) *Eotel                                       | ผูก error กับ logger + attribute "error" (และเรียก exporter ถ้ามี)        |
+| Ctx                   | (l *Eotel) Ctx() context.Context                                             | คืน context ปัจจุบัน                                                      |
+| Span                  | (l *Eotel) Span() trace.Span                                                 | คืน span ปัจจุบัน (อาจเป็น nil)                                           |
+| WithTracer            | (l *Eotel) WithTracer(name string, fn func(ctx context.Context) error) error | สร้าง span เฉพาะกิจแล้วรัน fn ภายใน                                       |
+| SpanEvent             | (l *Eotel) SpanEvent(name string, attrs ...attribute.KeyValue)               | เพิ่ม event ลงใน span                                                     |
+| SetSpanAttr           | (l *Eotel) SetSpanAttr(key string, value any)                                | ตั้ง attribute ให้ span                                                   |
+| SetSpanError          | (l *Eotel) SetSpanError(err error)                                           | Record error ลง span                                                      |
+| Child                 | (l *Eotel) Child(name string) *Eotel                                         | สร้าง child span + child logger (สืบทอด tracer/meter/exporter จาก parent) |
+| Start / Timer.Stop    | (l *Eotel) Start(name string) Timer  /  (t *eotelTimer) Stop()               | ตัวจับเวลาแบบง่าย: บันทึก event `custom.duration_ms` เมื่อ Stop()         |
+| NewWithExporter       | NewWithExporter(ctx context.Context, name string, exp Exporter) *Eotel       | สร้าง logger ที่ใช้ exporter กำหนดเอง                                     |
+| SetExporter           | (l *Eotel) SetExporter(exp Exporter) *Eotel                                  | เปลี่ยน exporter runtime                                                  |
 
 ## การใช้งานเพิ่มเติม
 ```go
@@ -329,3 +337,5 @@ func doSubTask(ctx context.Context) {
 	fmt.Print("") // no-op เพื่อกัน unused import warning ในบางกรณี
 }
 ```
+
+### การใช้งาน Exporter
