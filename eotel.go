@@ -19,10 +19,7 @@ import (
 
 type loggerCtxKey struct{}
 
-type Exporter interface {
-	Send(level string, msg string, traceID string, spanID string)
-	CaptureError(err error, tags map[string]string, extras map[string]any)
-}
+// NOTE: Exporter interface moved to exporter.go
 
 type Eotel struct {
 	ctx          context.Context
@@ -51,9 +48,22 @@ func New(ctx context.Context, name string) *Eotel {
 		logCounter:   logCounter,
 		durationHist: durationHist,
 		start:        time.Now(),
-		exporter:     nil,
+		exporter:     defaultExporter, // ใช้ default exporter ที่ประกอบจาก InitEOTEL
 		name:         name,
 	}
+}
+
+// NewWithExporter: ระบุ exporter เอง
+func NewWithExporter(ctx context.Context, name string, exp Exporter) *Eotel {
+	l := New(ctx, name)
+	l.exporter = exp
+	return l
+}
+
+// SetExporter: เปลี่ยน exporter runtime
+func (l *Eotel) SetExporter(exp Exporter) *Eotel {
+	l.exporter = exp
+	return l
 }
 
 func Inject(ctx context.Context, logger *Eotel) context.Context {
@@ -149,7 +159,8 @@ func (l *Eotel) log(level, msg string) {
 		}
 	}
 
-	if globalCfg.EnableLoki && l.exporter != nil {
+	// เปลี่ยนเงื่อนไข: ส่งออกผ่าน exporter "ถ้ามี" (ไม่ผูกกับ EnableLoki)
+	if l.exporter != nil {
 		l.exporter.Send(level, msg, traceID, sc.SpanID().String())
 	}
 
