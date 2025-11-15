@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 )
@@ -24,6 +25,7 @@ func SendLokiAsync(level string, msg string, traceID string, spanID string) {
 		"service":  globalCfg.ServiceName,
 		"job":      globalCfg.JobName,
 	}
+
 	logChan <- LokiEntry{Labels: labels, Message: msg}
 }
 
@@ -32,6 +34,9 @@ var logChan = make(chan LokiEntry, 100)
 func init() {
 	go func() {
 		for entry := range logChan {
+			b, _ := json.Marshal(entry)
+			log.Println(string(b))
+
 			_ = sendLoki(entry)
 		}
 	}()
